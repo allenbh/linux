@@ -186,6 +186,7 @@ static inline int ntb_ctx_ops_is_valid(const struct ntb_ctx_ops *ops)
  * @link_is_up:		See ntb_link_is_up().
  * @link_enable:	See ntb_link_enable().
  * @link_disable:	See ntb_link_disable().
+ * @link_guard:		See ntb_link_guard().
  * @db_is_unsafe:	See ntb_db_is_unsafe().
  * @db_valid_mask:	See ntb_db_valid_mask().
  * @db_vector_count:	See ntb_db_vector_count().
@@ -225,6 +226,7 @@ struct ntb_dev_ops {
 	int (*link_enable)(struct ntb_dev *ntb,
 			   enum ntb_speed max_speed, enum ntb_width max_width);
 	int (*link_disable)(struct ntb_dev *ntb);
+	int (*link_guard)(struct ntb_dev *ntb);
 
 	int (*db_is_unsafe)(struct ntb_dev *ntb);
 	u64 (*db_valid_mask)(struct ntb_dev *ntb);
@@ -272,6 +274,7 @@ static inline int ntb_dev_ops_is_valid(const struct ntb_dev_ops *ops)
 		ops->link_is_up				&&
 		ops->link_enable			&&
 		ops->link_disable			&&
+		/* ops->link_guard			&& */
 		/* ops->db_is_unsafe			&& */
 		ops->db_valid_mask			&&
 
@@ -571,6 +574,31 @@ static inline int ntb_link_enable(struct ntb_dev *ntb,
 static inline int ntb_link_disable(struct ntb_dev *ntb)
 {
 	return ntb->ops->link_disable(ntb);
+}
+
+/**
+ * ntb_link_guard() - disable automatic link retraining on the secondary side
+ * @ntb:	NTB device context.
+ *
+ * Disable link the link from automatically retraining after a transient link
+ * error on the secondary side.  The link will remain up if it is already up,
+ * as long as there are no errors.  If a link error occurs after this function
+ * returns, then the link will transition to down, and the link will stay down
+ * until it is enabled again with ntb_link_enable().
+ *
+ * The guard is removed by ntb_link_enable().  Drivers that use the guard
+ * should call ntb_link_enable() to enable the link, and then ntb_link_guard()
+ * after observing the link is up, to set the guard.  The guard must be re-set
+ * each time after the link comes up to be effective.
+ *
+ * Return: Zero on success, otherwise an error number.
+ */
+static inline int ntb_link_guard(struct ntb_dev *ntb)
+{
+	if (!ntb->ops->link_guard)
+		return -EINVAL;
+
+	return ntb->ops->link_guard(ntb);
 }
 
 /**
